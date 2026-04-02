@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Khmer STT Tool v4</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body data-page="{{ page }}" data-verify-url="{{ url_for('verify_route') }}" data-process-url="{{ url_for('process_ajax_route') }}">
+  <main class="container">
+    <header class="header">
+      <h1>Khmer STT Tool v4</h1>
+      <p class="status">{{ status }}</p>
+    </header>
+
+    <section class="card">
+      <h2>Add New Audio File</h2>
+      <form id="process-form" method="post" action="{{ url_for('process_route') }}" enctype="multipart/form-data" class="grid-form">
+        <input type="hidden" name="page" value="{{ page }}" />
+
+        <label class="field">
+          <span>Audio File</span>
+          <input type="file" name="audio_file" accept="audio/*" required />
+        </label>
+
+        <label class="field">
+          <span>Topic</span>
+          <input type="text" name="topic" placeholder="Recording name or source" />
+        </label>
+
+        <label class="field">
+          <span>Subtopic</span>
+          <input type="text" name="subtopic" placeholder="Example: a100" />
+        </label>
+      </form>
+
+      <div class="actions row-actions">
+        <button id="process-btn" class="btn btn-blue" type="submit" form="process-form">Process Audio</button>
+
+        <form method="post" action="{{ url_for('export_route') }}">
+          <button class="btn btn-dark" type="submit">Export Dataset ZIP</button>
+        </form>
+
+        <form id="clear-history-form" method="post" action="{{ url_for('clear_history_route') }}">
+          <button id="clear-history-open" class="btn btn-outline" type="button">Clear History</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Full Original Audio</h2>
+      {% if raw_audio_path %}
+        <audio controls preload="metadata" class="full-audio">
+          <source src="{{ url_for('media_route') }}?path={{ raw_audio_path | urlencode }}" type="audio/wav" />
+        </audio>
+      {% else %}
+        <p class="muted">No source audio loaded yet.</p>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>Chunks</h2>
+        <span class="muted">Total {{ total_items }} chunks</span>
+      </div>
+
+      {% if rows %}
+        <div class="chunk-list">
+          {% for row in rows %}
+            {% set global_idx = ((page - 1) * per_page) + loop.index0 %}
+            <article class="chunk-card" data-index="{{ global_idx }}">
+              <div class="chunk-title">
+                <strong>{{ row.audio_name }}</strong>
+                <span>{{ format_time_range(row.start, row.end) }}</span>
+                {% if row.verified and row.finalized and row.final_audio_name %}
+                  <span class="badge">Final: {{ row.final_audio_name }}</span>
+                {% endif %}
+              </div>
+
+              <div class="chunk-grid">
+                <div>
+                  <audio controls preload="metadata" class="chunk-audio">
+                    <source src="{{ url_for('media_route') }}?path={{ row.preview_audio_path | urlencode }}" type="audio/wav" />
+                  </audio>
+                </div>
+
+                <div>
+                  <label class="field">
+                    <span>Label</span>
+                    <textarea class="transcript" rows="4">{{ row.transcript }}</textarea>
+                  </label>
+                </div>
+
+                <div class="meta-col">
+                  <label class="field">
+                    <span>Speaker</span>
+                    <select class="speaker">
+                      <option value="Agents" {% if csv_to_ui_speaker(row.speaker_id) == 'Agents' %}selected{% endif %}>Agents</option>
+                      <option value="Customers" {% if csv_to_ui_speaker(row.speaker_id) == 'Customers' %}selected{% endif %}>Customers</option>
+                    </select>
+                  </label>
+
+                  <label class="field">
+                    <span>Gender</span>
+                    <select class="gender">
+                      <option value="Female" {% if csv_to_ui_gender(row.gender) == 'Female' %}selected{% endif %}>Female</option>
+                      <option value="Male" {% if csv_to_ui_gender(row.gender) == 'Male' %}selected{% endif %}>Male</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="btn-col">
+                  {% if row.verified %}
+                    <button class="btn verify-btn is-verified" type="button" data-action="unverify">Verified</button>
+                  {% else %}
+                    <button class="btn verify-btn is-unverified" type="button" data-action="verify">Verify</button>
+                  {% endif %}
+                </div>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="muted">No chunks yet.</p>
+      {% endif %}
+
+      <nav class="pagination" aria-label="Pagination">
+        {% if page > 1 %}
+          <a class="page-item" href="{{ url_for('index', page=page-1) }}">&#8249;</a>
+        {% else %}
+          <span class="page-item disabled">&#8249;</span>
+        {% endif %}
+
+        {% for item in page_items %}
+          {% if item == '...' %}
+            <span class="page-item dots">...</span>
+          {% elif item == page %}
+            <span class="page-item active">{{ item }}</span>
+          {% else %}
+            <a class="page-item" href="{{ url_for('index', page=item) }}">{{ item }}</a>
+          {% endif %}
+        {% endfor %}
+
+        {% if page < total_pages %}
+          <a class="page-item" href="{{ url_for('index', page=page+1) }}">&#8250;</a>
+        {% else %}
+          <span class="page-item disabled">&#8250;</span>
+        {% endif %}
+      </nav>
+    </section>
+  </main>
+
+  <div id="clear-history-modal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="clear-history-title">
+      <h3 id="clear-history-title">Clear History</h3>
+      <p>Clear current session chunks and transcript text from this UI?</p>
+      <div class="modal-actions">
+        <button id="clear-history-cancel" class="btn btn-outline" type="button">Cancel</button>
+        <button id="clear-history-confirm" class="btn btn-dark" type="button">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
