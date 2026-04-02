@@ -1,1 +1,0 @@
-# khmer_stt_tool
